@@ -53,6 +53,10 @@
     width:100%; height:100%;
     pointer-events:none;             /* pointer math is done on the whole stage */
   }
+  /* a dedicated layer just for the phone-only width stretch,
+     kept separate so it never fights the breathing or the zoom */
+  #catStretch{ display:flex; align-items:center; justify-content:center; }
+
   /* gentle breathing while calm (on the wrapper, so it never fights the zoom) */
   #catWrap.breathe{ animation:breathe 3.6s ease-in-out infinite; }
   @keyframes breathe{
@@ -200,6 +204,8 @@
   @media (max-width:520px){
     #hud{ padding:12px 14px; }
     #comb{ width:54px; height:100px; }
+    /* Dau looks a bit thin on tall, narrow phone screens — widen him 10% here only */
+    #catStretch{ transform:scaleX(1.10); }
   }
 </style>
 </head>
@@ -208,7 +214,9 @@
 <div id="game">
   <!-- The cat -->
   <div id="catWrap">
-    <img id="cat" src="assets/Dau_calm.png" alt="Dau the cat" draggable="false" />
+    <div id="catStretch">
+      <img id="cat" src="assets/Dau_calm.png" alt="Dau the cat" draggable="false" />
+    </div>
   </div>
 
   <!-- Effects layers -->
