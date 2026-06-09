@@ -127,13 +127,14 @@
   #score{ font-size:clamp(40px,11vw,96px); font-weight:900; line-height:1;
            color:var(--accent-dark); text-shadow:0 2px 0 #fff, 0 0 10px rgba(255,255,255,.8); }
   #best{ font-size:14px; color:var(--text); opacity:.65; margin-top:6px; }
-  #muteBtn{
+  .hudBtns{ display:flex; gap:10px; pointer-events:none; }
+  .iconBtn{
     pointer-events:auto; cursor:pointer;
-    background:rgba(255,255,255,.7); border:1px solid rgba(0,0,0,.1);
+    background:rgba(255,255,255,.82); border:1px solid rgba(0,0,0,.1);
     color:var(--text); font-size:20px; width:46px; height:46px; border-radius:50%;
-    display:grid; place-items:center; box-shadow:0 2px 8px rgba(0,0,0,.08);
+    display:grid; place-items:center; box-shadow:0 2px 8px rgba(0,0,0,.12);
   }
-  #muteBtn:active{ transform:scale(.92); }
+  .iconBtn:active{ transform:scale(.92); }
 
   /* ---------- The comb that follows the pointer ---------- */
   #comb{
@@ -185,6 +186,15 @@
   .startBtn:active{ transform:translateY(4px); box-shadow:0 4px 0 var(--accent-dark); }
   .rules{ margin-top:26px; font-size:14px; color:var(--text); opacity:.75; max-width:480px; line-height:1.7 }
   .rules b{ color:var(--danger) }
+
+  /* Background picker on the title screen */
+  .bgPicker{ margin-top:22px; display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .bgLabel{ font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--text); opacity:.6; font-weight:800; }
+  .bgSwatches{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:310px; }
+  .swatch{ width:40px; height:40px; border-radius:50%; cursor:pointer; border:3px solid #fff;
+    box-shadow:0 2px 8px rgba(0,0,0,.2); transition:transform .1s; }
+  .swatch:active{ transform:scale(.9); }
+  .swatch.active{ outline:3px solid var(--accent-dark); outline-offset:2px; }
 
   /* Death screen — Dark Souls style (kept dark on purpose for drama) */
   #deathScreen{ background:rgba(8,8,10,.9); }
@@ -259,7 +269,10 @@
       <div id="score">0</div>
       <div id="best">Best: 0</div>
     </div>
-    <button id="muteBtn" title="Sound on/off">🔊</button>
+    <div class="hudBtns">
+      <button id="menuBtn" class="iconBtn" title="Main menu">🏠</button>
+      <button id="muteBtn" class="iconBtn" title="Sound on/off">🔊</button>
+    </div>
   </div>
 
   <!-- The comb cursor (an inline SVG so there's no extra image file to manage) -->
@@ -298,6 +311,10 @@
       🖱️ <b style="color:var(--text)">Hold &amp; drag</b> to brush &nbsp;•&nbsp;
       🟥 See red / <b>FREEZE!</b> → let go and hold still &nbsp;•&nbsp;
       📱 Works with your finger too
+    </div>
+    <div class="bgPicker" id="bgPicker">
+      <span class="bgLabel">Background</span>
+      <div class="bgSwatches" id="bgSwatches"></div>
     </div>
   </div>
 
@@ -499,9 +516,9 @@ window.addEventListener('contextmenu', e=>e.preventDefault());
    ------------------------------------------------------------ */
 let wiggleCooldown = 0;
 function brushStroke(dist){
-  // score: roughly 1 point per 14px brushed
+  // score: roughly 1 point per 30px brushed (slower — points feel earned)
   scoreDist += dist;
-  while(scoreDist >= 14){ score++; scoreDist -= 14; }
+  while(scoreDist >= 30){ score++; scoreDist -= 30; }
   scoreEl.textContent = score;
   recordStroke();                      // achievements tracking
 
@@ -631,6 +648,23 @@ muteBtn.addEventListener('click', (e)=>{
   muteBtn.textContent = soundOn ? '🔊' : '🔇';
   ensureAudio();
 });
+
+/* ------------------------------------------------------------
+   RETURN TO MAIN MENU  (button sits in the top-right HUD,
+   well outside the grooming area so it can't be hit by accident)
+   ------------------------------------------------------------ */
+function goToMenu(){
+  clearTimeout(lookTimer); clearTimeout(endLookTimer); clearTimeout(graceTimer);
+  state = 'title'; lethal = false;
+  cat.classList.remove('zoomAlert','zoomBite','wiggle');
+  cat.src = IMG_CALM;
+  catWrap.classList.remove('breathe');
+  danger.classList.remove('on'); freeze.classList.remove('on');
+  deathScreen.classList.add('hidden'); achScreen.classList.add('hidden');
+  titleScreen.classList.remove('hidden');
+  score = 0; scoreDist = 0; scoreEl.textContent = '0';
+}
+document.getElementById('menuBtn').addEventListener('click', e=>{ e.stopPropagation(); goToMenu(); });
 function loadBest(){ try{ return parseInt(localStorage.getItem('dau-best')||'0',10)||0; }catch(e){ return 0; } }
 function saveBest(v){ try{ localStorage.setItem('dau-best', String(v)); }catch(e){} }
 
@@ -657,6 +691,16 @@ const ACHS = [
   { id:'ouch10',  icon:'🩹', name:'Ouch!',           desc:'Get bitten 10 times (it happens!)',   check:s=>s.totalDeaths>=10 },
   { id:'spa1000', icon:'💆', name:'Spa Day',         desc:'Brush 1000 strokes in total',         check:s=>s.totalStrokes>=1000 },
   { id:'devoted', icon:'💗', name:'Devoted',         desc:'Play 25 runs',                        check:s=>s.totalRuns>=25 },
+  { id:'s300',      icon:'🌟', name:'Legendary Groomer', desc:'Reach 300 points in one run',        check:s=>s.bestRun>=300 },
+  { id:'s400',      icon:'🔥', name:'Unstoppable',       desc:'Reach 400 points in one run',        check:s=>s.bestRun>=400 },
+  { id:'s500',      icon:'😻', name:'Đậu Whisperer',     desc:'Reach 500 points in one run',        check:s=>s.bestRun>=500 },
+  { id:'cool10',    icon:'🥶', name:'Ice Cold',          desc:'Freeze in time 10 times in one run', check:s=>s.bestFreezeStreak>=10 },
+  { id:'cool20',    icon:'🗿', name:'Statue',            desc:'Freeze in time 20 times in one run', check:s=>s.bestFreezeStreak>=20 },
+  { id:'steel100',  icon:'🛡️', name:'Unshakeable',       desc:'Freeze in time 100 times total',     check:s=>s.totalFreezes>=100 },
+  { id:'spa5000',   icon:'🧖', name:'Day at the Spa',    desc:'Brush 5,000 strokes in total',       check:s=>s.totalStrokes>=5000 },
+  { id:'spa20000',  icon:'💈', name:'Master Stylist',    desc:'Brush 20,000 strokes in total',      check:s=>s.totalStrokes>=20000 },
+  { id:'ouch50',    icon:'🧟', name:'Battle-Scarred',    desc:'Get bitten 50 times total',          check:s=>s.totalDeaths>=50 },
+  { id:'devoted100',icon:'💞', name:'Best Friend',       desc:'Play 100 runs',                      check:s=>s.totalRuns>=100 },
 ];
 
 function snapshot(){
@@ -737,6 +781,40 @@ function loadStats(){ try{ return Object.assign({}, DEFAULT_STATS, JSON.parse(lo
 function saveStats(){ try{ localStorage.setItem('dau-stats', JSON.stringify(stats)); }catch(e){} }
 function loadAch(){ try{ return JSON.parse(localStorage.getItem('dau-ach')||'[]'); }catch(e){ return []; } }
 function saveAch(){ try{ localStorage.setItem('dau-ach', JSON.stringify([...unlocked])); }catch(e){} }
+
+/* ------------------------------------------------------------
+   BACKGROUNDS  — pick a scene; the choice is saved on the device.
+   All kept light/pastel so Đậu's cut-out edges stay clean.
+   ------------------------------------------------------------ */
+const BGS = [
+  { id:'cloud',  name:'Cloud',  css:'radial-gradient(130% 100% at 50% 45%, #ffffff 0%, #ffffff 60%, #f0e7dd 100%)' },
+  { id:'blush',  name:'Blush',  css:'radial-gradient(130% 100% at 50% 40%, #fff5fa 0%, #ffe3f1 60%, #ffc9e3 100%)' },
+  { id:'mint',   name:'Mint',   css:'radial-gradient(130% 100% at 50% 40%, #f3fffb 0%, #d8f7ec 60%, #b6ecd9 100%)' },
+  { id:'sky',    name:'Sky',    css:'radial-gradient(130% 100% at 50% 35%, #f4fbff 0%, #dbeefb 60%, #bfe0f5 100%)' },
+  { id:'sunset', name:'Sunset', css:'linear-gradient(180deg, #fff1e6 0%, #ffd9c0 55%, #ffc2a8 100%)' },
+  { id:'lilac',  name:'Lilac',  css:'linear-gradient(180deg, #faf5ff 0%, #ece0fb 55%, #dcc8f5 100%)' },
+];
+let currentBg = loadBg();
+function applyBg(id){
+  const b = BGS.find(x=>x.id===id) || BGS[0];
+  currentBg = b.id;
+  game.style.background = b.css;
+  saveBg(b.id);
+  document.querySelectorAll('.swatch').forEach(s=> s.classList.toggle('active', s.dataset.bg===b.id));
+}
+function renderSwatches(){
+  const wrap = document.getElementById('bgSwatches');
+  wrap.innerHTML = BGS.map(b=>`<div class="swatch" data-bg="${b.id}" title="${b.name}" style="background:${b.css}"></div>`).join('');
+  wrap.querySelectorAll('.swatch').forEach(s=>{
+    s.addEventListener('click', e=>{ e.stopPropagation(); applyBg(s.dataset.bg); });
+  });
+}
+function loadBg(){ try{ return localStorage.getItem('dau-bg') || 'cloud'; }catch(e){ return 'cloud'; } }
+function saveBg(v){ try{ localStorage.setItem('dau-bg', v); }catch(e){} }
+
+document.getElementById('bgPicker').addEventListener('click', e=>e.stopPropagation());
+renderSwatches();
+applyBg(currentBg);
 </script>
 </body>
 </html>
