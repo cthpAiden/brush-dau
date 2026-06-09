@@ -201,6 +201,36 @@
   #deathScreen .restart{ margin-top:30px; font-size:18px; color:#f4f1ea; opacity:.75; }
   #deathScreen .restart::after{ content:' ▸'; }
 
+  /* ---------- Achievements: button, unlock toast, panel ---------- */
+  .achBtn{ margin-top:14px; padding:10px 22px; font-size:15px; font-weight:800;
+    color:var(--accent-dark); background:#fff; border:2px solid var(--accent);
+    border-radius:30px; cursor:pointer; box-shadow:0 4px 0 rgba(214,90,142,.35); }
+  .achBtn:active{ transform:translateY(3px); box-shadow:0 1px 0 rgba(214,90,142,.35); }
+
+  #achToast{ position:fixed; left:50%; bottom:28px; transform:translate(-50%,160%);
+    display:flex; align-items:center; gap:12px; z-index:80; pointer-events:none;
+    background:#fff; color:var(--text); padding:12px 18px; border-radius:16px; max-width:90vw;
+    box-shadow:0 12px 34px rgba(0,0,0,.22); border:2px solid var(--accent);
+    transition:transform .4s cubic-bezier(.2,.85,.25,1); }
+  #achToast.show{ transform:translate(-50%,0); }
+  #achToast .ic{ font-size:30px; }
+  #achToast .t{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--accent-dark); font-weight:800; }
+  #achToast .n{ font-size:17px; font-weight:800; }
+
+  #achScreen{ background:rgba(255,252,248,.97); z-index:70; }
+  .achPanel{ width:min(560px,94vw); max-height:86vh; display:flex; flex-direction:column; align-items:stretch; }
+  .achPanel h2{ color:var(--accent-dark); margin:0 0 14px; font-size:clamp(24px,6vw,34px); text-align:center; }
+  .achPanel h2 span{ font-size:.6em; color:var(--text); opacity:.6; }
+  #achList{ overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:4px 4px 8px; }
+  .achCard{ display:flex; align-items:center; gap:14px; text-align:left;
+    background:#fff; border:2px solid #eee; border-radius:14px; padding:12px 14px; }
+  .achCard.unlocked{ border-color:var(--accent); background:#fff7fb; }
+  .achCard .ic{ font-size:30px; width:40px; text-align:center; filter:grayscale(1); opacity:.4; }
+  .achCard.unlocked .ic{ filter:none; opacity:1; }
+  .achCard .nm{ font-weight:800; }
+  .achCard .ds{ font-size:13px; opacity:.72; }
+  .achCard .st{ margin-left:auto; font-size:20px; }
+
   @media (max-width:520px){
     #hud{ padding:12px 14px; }
     #comb{ width:54px; height:100px; }
@@ -263,6 +293,7 @@
        but the moment Dau <b style="color:var(--danger)">snarls and lunges at you</b>, STOP brushing.
        Keep going and you'll get bitten.</p>
     <button class="startBtn" id="startBtn">Start brushing</button>
+    <button class="achBtn" id="achBtnTitle">🏆 Achievements</button>
     <div class="rules">
       🖱️ <b style="color:var(--text)">Hold &amp; drag</b> to brush &nbsp;•&nbsp;
       🟥 See red / <b>FREEZE!</b> → let go and hold still &nbsp;•&nbsp;
@@ -276,7 +307,20 @@
     <div class="finalScore">Score: <span id="finalScore">0</span></div>
     <h1 class="died">YOU DIED</h1>
     <div class="newbest" id="newBest"></div>
+    <button class="achBtn" id="achBtnDeath">🏆 Achievements</button>
     <div class="restart">Click / tap to brush again</div>
+  </div>
+
+  <!-- ACHIEVEMENT TOAST (slides up when you unlock something) -->
+  <div id="achToast"></div>
+
+  <!-- ACHIEVEMENTS SCREEN -->
+  <div id="achScreen" class="screen hidden">
+    <div class="achPanel">
+      <h2>🏆 Achievements <span id="achCount"></span></h2>
+      <div id="achList"></div>
+      <button class="startBtn" id="achBack">Back</button>
+    </div>
   </div>
 </div>
 
@@ -459,6 +503,7 @@ function brushStroke(dist){
   scoreDist += dist;
   while(scoreDist >= 14){ score++; scoreDist -= 14; }
   scoreEl.textContent = score;
+  recordStroke();                      // achievements tracking
 
   // visuals + sound
   comb.classList.add('brushing');
@@ -520,6 +565,7 @@ function endLook(){
   catWrap.classList.add('breathe');
   danger.classList.remove('on');
   freeze.classList.remove('on');
+  recordFreeze();                      // you survived a snarl!
   scheduleLook();
 }
 
@@ -543,6 +589,7 @@ function die(){
   let isBest = false;
   if(score > best){ best = score; saveBest(best); isBest = true; }
   bestEl.textContent = 'Best: ' + best;
+  recordDeath();                       // achievements tracking
 
   // show the death screen after the bite zoom lands
   setTimeout(()=>{
@@ -559,6 +606,7 @@ function startGame(){
   ensureAudio();
   score = 0; scoreDist = 0; lethal = false;
   scoreEl.textContent = '0';
+  resetRun();                          // reset per-run achievement counters
   state = 'playing';
   cat.classList.remove('zoomAlert','zoomBite','wiggle');
   cat.src = IMG_CALM;
@@ -585,6 +633,110 @@ muteBtn.addEventListener('click', (e)=>{
 });
 function loadBest(){ try{ return parseInt(localStorage.getItem('dau-best')||'0',10)||0; }catch(e){ return 0; } }
 function saveBest(v){ try{ localStorage.setItem('dau-best', String(v)); }catch(e){} }
+
+/* ------------------------------------------------------------
+   ACHIEVEMENTS  — tracked across all plays, saved on the device
+   ------------------------------------------------------------ */
+const achToast = document.getElementById('achToast');
+const achScreen= document.getElementById('achScreen');
+const achList  = document.getElementById('achList');
+const achCount = document.getElementById('achCount');
+
+const DEFAULT_STATS = { totalStrokes:0, totalFreezes:0, runFreezes:0, totalDeaths:0, totalRuns:0, bestFreezeStreak:0 };
+let stats = loadStats();
+let unlocked = new Set(loadAch());
+
+const ACHS = [
+  { id:'first',   icon:'🖌️', name:'First Brush',    desc:'Brush Đậu for the very first time',  check:s=>s.totalStrokes>=1 },
+  { id:'s25',     icon:'🐾', name:'Warming Up',      desc:'Reach 25 points in one run',          check:s=>s.bestRun>=25 },
+  { id:'s50',     icon:'✨', name:'Groomer',         desc:'Reach 50 points in one run',          check:s=>s.bestRun>=50 },
+  { id:'s100',    icon:'💯', name:'Pro Groomer',     desc:'Reach 100 points in one run',         check:s=>s.bestRun>=100 },
+  { id:'s200',    icon:'👑', name:'Master Groomer',  desc:'Reach 200 points in one run',         check:s=>s.bestRun>=200 },
+  { id:'cool5',   icon:'❄️', name:'Cool Hands',      desc:'Freeze in time 5 times in one run',   check:s=>s.bestFreezeStreak>=5 },
+  { id:'steel25', icon:'🧊', name:'Nerves of Steel', desc:'Freeze in time 25 times total',       check:s=>s.totalFreezes>=25 },
+  { id:'ouch10',  icon:'🩹', name:'Ouch!',           desc:'Get bitten 10 times (it happens!)',   check:s=>s.totalDeaths>=10 },
+  { id:'spa1000', icon:'💆', name:'Spa Day',         desc:'Brush 1000 strokes in total',         check:s=>s.totalStrokes>=1000 },
+  { id:'devoted', icon:'💗', name:'Devoted',         desc:'Play 25 runs',                        check:s=>s.totalRuns>=25 },
+];
+
+function snapshot(){
+  return {
+    runScore: score,
+    bestRun: Math.max(best, score),
+    totalStrokes: stats.totalStrokes,
+    totalFreezes: stats.totalFreezes,
+    runFreezes: stats.runFreezes,
+    bestFreezeStreak: Math.max(stats.bestFreezeStreak, stats.runFreezes),
+    totalDeaths: stats.totalDeaths,
+    totalRuns: stats.totalRuns,
+  };
+}
+function checkAchievements(){
+  const s = snapshot();
+  for(const a of ACHS){
+    if(!unlocked.has(a.id) && a.check(s)){
+      unlocked.add(a.id); saveAch(); showToast(a); soundAchieve();
+    }
+  }
+}
+
+let toastQueue = [], toastBusy = false;
+function showToast(a){ toastQueue.push(a); if(!toastBusy) nextToast(); }
+function nextToast(){
+  if(!toastQueue.length){ toastBusy = false; return; }
+  toastBusy = true;
+  const a = toastQueue.shift();
+  achToast.innerHTML = `<span class="ic">${a.icon}</span><div><div class="t">Achievement unlocked</div><div class="n">${a.name}</div></div>`;
+  achToast.classList.add('show');
+  setTimeout(()=>{ achToast.classList.remove('show'); setTimeout(nextToast, 400); }, 2600);
+}
+function soundAchieve(){
+  if(!soundOn || !audioCtx) return;
+  blip('sine', 660, 990, 0.12, 0.16);
+  setTimeout(()=>blip('sine', 990, 1320, 0.16, 0.14), 95);
+}
+
+// record game events
+function recordStroke(){
+  stats.totalStrokes++;
+  checkAchievements();
+  if(stats.totalStrokes % 25 === 0) saveStats();
+}
+function recordFreeze(){
+  stats.runFreezes++; stats.totalFreezes++;
+  if(stats.runFreezes > stats.bestFreezeStreak) stats.bestFreezeStreak = stats.runFreezes;
+  saveStats(); checkAchievements();
+}
+function recordDeath(){
+  stats.totalDeaths++; stats.totalRuns++; stats.runFreezes = 0;
+  saveStats(); checkAchievements();
+}
+function resetRun(){ stats.runFreezes = 0; }
+
+// achievements panel
+function renderAch(){
+  achCount.textContent = `(${unlocked.size}/${ACHS.length})`;
+  achList.innerHTML = ACHS.map(a=>{
+    const got = unlocked.has(a.id);
+    return `<div class="achCard ${got?'unlocked':''}">
+      <span class="ic">${a.icon}</span>
+      <div><div class="nm">${a.name}</div><div class="ds">${a.desc}</div></div>
+      <span class="st">${got?'✅':'🔒'}</span>
+    </div>`;
+  }).join('');
+}
+function openAch(){ renderAch(); achScreen.classList.remove('hidden'); }
+function closeAch(){ achScreen.classList.add('hidden'); }
+
+document.getElementById('achBtnTitle').addEventListener('click', e=>{ e.stopPropagation(); openAch(); });
+document.getElementById('achBtnDeath').addEventListener('click', e=>{ e.stopPropagation(); openAch(); });
+document.getElementById('achBack').addEventListener('click', e=>{ e.stopPropagation(); closeAch(); });
+achScreen.addEventListener('click', e=>{ if(e.target===achScreen) closeAch(); });
+
+function loadStats(){ try{ return Object.assign({}, DEFAULT_STATS, JSON.parse(localStorage.getItem('dau-stats')||'{}')); }catch(e){ return Object.assign({}, DEFAULT_STATS); } }
+function saveStats(){ try{ localStorage.setItem('dau-stats', JSON.stringify(stats)); }catch(e){} }
+function loadAch(){ try{ return JSON.parse(localStorage.getItem('dau-ach')||'[]'); }catch(e){ return []; } }
+function saveAch(){ try{ localStorage.setItem('dau-ach', JSON.stringify([...unlocked])); }catch(e){} }
 </script>
 </body>
 </html>
