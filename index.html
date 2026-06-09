@@ -88,6 +88,15 @@
     75%{ transform:rotate(1.4deg) translateX(4px) }
     100%{ transform:rotate(0) }
   }
+  /* fake-out: a quick startled flinch (NO snarl) to bait you into freezing */
+  #cat.twitch{ animation:twitch .45s ease-in-out; }
+  @keyframes twitch{
+    0%{ transform:scale(1) rotate(0) }
+    18%{ transform:scale(1.05) rotate(-1.8deg) }
+    40%{ transform:scale(1.03) rotate(1.5deg) }
+    62%{ transform:scale(1.06) rotate(-0.9deg) }
+    100%{ transform:scale(1) rotate(0) }
+  }
   /* hard shake the instant Dau bites */
   #game.shake{ animation:shake .4s linear; }
   @keyframes shake{
@@ -216,6 +225,9 @@
     color:var(--accent-dark); background:#fff; border:2px solid var(--accent);
     border-radius:30px; cursor:pointer; box-shadow:0 4px 0 rgba(214,90,142,.35); }
   .achBtn:active{ transform:translateY(3px); box-shadow:0 1px 0 rgba(214,90,142,.35); }
+  .achReset{ margin-top:10px; padding:9px 18px; font-size:13px; font-weight:700;
+    color:#c0392b; background:#fff; border:2px solid #f1c9c4; border-radius:24px; cursor:pointer; }
+  .achReset:active{ transform:translateY(2px); }
 
   #achToast{ position:fixed; left:50%; bottom:28px; transform:translate(-50%,160%);
     display:flex; align-items:center; gap:12px; z-index:80; pointer-events:none;
@@ -337,6 +349,7 @@
       <h2>🏆 Achievements <span id="achCount"></span></h2>
       <div id="achList"></div>
       <button class="startBtn" id="achBack">Back</button>
+      <button class="achReset" id="achReset">↺ Reset progress</button>
     </div>
   </div>
 </div>
@@ -380,6 +393,7 @@ const ptr = { x:-9999, y:-9999, down:false, lastX:0, lastY:0 };
 let lookTimer = null;           // schedules the next "Dau snarls at you"
 let endLookTimer = null;        // ends a looking phase
 let graceTimer = null;          // reaction window before biting becomes lethal
+let fakeTimer = null;           // schedules harmless fake-out flinches
 let lethal = false;             // true once the grace window has passed during a look
 
 bestEl.textContent = 'Best: ' + best;
@@ -516,9 +530,9 @@ window.addEventListener('contextmenu', e=>e.preventDefault());
    ------------------------------------------------------------ */
 let wiggleCooldown = 0;
 function brushStroke(dist){
-  // score: roughly 1 point per 160px brushed (very slow — points are hard-earned)
+  // score: roughly 1 point per 180px brushed (very slow — points are hard-earned)
   scoreDist += dist;
-  while(scoreDist >= 160){ score++; scoreDist -= 160; }
+  while(scoreDist >= 180){ score++; scoreDist -= 180; }
   scoreEl.textContent = score;
   recordStroke();                      // achievements tracking
 
@@ -557,7 +571,7 @@ function startLook(){
   if(state!=='playing') return;
   state = 'looking';
   lethal = false;                       // grace period: not lethal yet
-  cat.classList.remove('wiggle');
+  cat.classList.remove('wiggle','twitch');
   catWrap.classList.remove('breathe');  // stop breathing so the zoom is clean
   cat.src = IMG_ALERT;                  // Dau snarls, mouth wide open
   cat.classList.add('zoomAlert');       // ★ head zooms in toward the mouth
@@ -587,12 +601,30 @@ function endLook(){
 }
 
 /* ------------------------------------------------------------
+   FAKE-OUTS  — Dau flinches/twitches WITHOUT snarling, purely to
+   bait you into freezing for nothing. Never dangerous.
+   ------------------------------------------------------------ */
+function scheduleFake(){
+  clearTimeout(fakeTimer);
+  fakeTimer = setTimeout(()=>{
+    if(state==='playing') doFakeout();
+    scheduleFake();
+  }, 1800 + Math.random()*3500);
+}
+function doFakeout(){
+  cat.classList.remove('wiggle','twitch'); void cat.offsetWidth;
+  cat.classList.add('twitch');
+  soundFake();
+}
+function soundFake(){ blip('triangle', 520, 430, 0.09, 0.07); }
+
+/* ------------------------------------------------------------
    DEATH  — zoom HARD into the open mouth, then YOU DIED
    ------------------------------------------------------------ */
 function die(){
   if(state==='dead') return;
   state = 'dead';
-  clearTimeout(lookTimer); clearTimeout(endLookTimer); clearTimeout(graceTimer);
+  clearTimeout(lookTimer); clearTimeout(endLookTimer); clearTimeout(graceTimer); clearTimeout(fakeTimer);
   soundBite();
   cat.src = IMG_ALERT;
   cat.classList.remove('zoomAlert');
@@ -633,6 +665,7 @@ function startGame(){
   titleScreen.classList.add('hidden');
   deathScreen.classList.add('hidden');
   scheduleLook();
+  scheduleFake();
 }
 
 document.getElementById('startBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); });
@@ -654,9 +687,9 @@ muteBtn.addEventListener('click', (e)=>{
    well outside the grooming area so it can't be hit by accident)
    ------------------------------------------------------------ */
 function goToMenu(){
-  clearTimeout(lookTimer); clearTimeout(endLookTimer); clearTimeout(graceTimer);
+  clearTimeout(lookTimer); clearTimeout(endLookTimer); clearTimeout(graceTimer); clearTimeout(fakeTimer);
   state = 'title'; lethal = false;
-  cat.classList.remove('zoomAlert','zoomBite','wiggle');
+  cat.classList.remove('zoomAlert','zoomBite','wiggle','twitch');
   cat.src = IMG_CALM;
   catWrap.classList.remove('breathe');
   danger.classList.remove('on'); freeze.classList.remove('on');
@@ -703,15 +736,15 @@ const ACHS = [
   { id:'devoted100',icon:'💞', name:'Best Friend',       desc:'Play 100 runs',                      check:s=>s.totalRuns>=100 },
   // --- 30 more (score milestones) ---
   { id:'s75',      icon:'🧼', name:'Tidy',               desc:'Reach 75 points in one run',          check:s=>s.bestRun>=75 },
-  { id:'s125',     icon:'🪮', name:'Sleek Coat',         desc:'Reach 125 points in one run',         check:s=>s.bestRun>=125 },
+  { id:'s125',     icon:'💇', name:'Sleek Coat',         desc:'Reach 125 points in one run',         check:s=>s.bestRun>=125 },
   { id:'s150',     icon:'☁️', name:'Fluffied',           desc:'Reach 150 points in one run',         check:s=>s.bestRun>=150 },
   { id:'s250',     icon:'💎', name:'Glamour Puss',       desc:'Reach 250 points in one run',         check:s=>s.bestRun>=250 },
   { id:'s350',     icon:'🏆', name:'Show Cat',           desc:'Reach 350 points in one run',         check:s=>s.bestRun>=350 },
   { id:'s600',     icon:'🌈', name:'Purrfection',        desc:'Reach 600 points in one run',         check:s=>s.bestRun>=600 },
   { id:'s750',     icon:'⚡', name:'Untouchable',         desc:'Reach 750 points in one run',         check:s=>s.bestRun>=750 },
-  { id:'s1000',    icon:'🪅', name:'Grandmaster Groomer',desc:'Reach 1000 points in one run',        check:s=>s.bestRun>=1000 },
+  { id:'s1000',    icon:'🎉', name:'Grandmaster Groomer',desc:'Reach 1000 points in one run',        check:s=>s.bestRun>=1000 },
   // --- total strokes ---
-  { id:'spa2500',  icon:'🪥', name:'Regular',            desc:'Brush 2,500 strokes in total',        check:s=>s.totalStrokes>=2500 },
+  { id:'spa2500',  icon:'🚿', name:'Regular',            desc:'Brush 2,500 strokes in total',        check:s=>s.totalStrokes>=2500 },
   { id:'spa10000', icon:'🛁', name:'Spa Regular',        desc:'Brush 10,000 strokes in total',       check:s=>s.totalStrokes>=10000 },
   { id:'spa50000', icon:'🏬', name:'Salon Owner',        desc:'Brush 50,000 strokes in total',       check:s=>s.totalStrokes>=50000 },
   { id:'spa100000',icon:'🌟', name:'Legend of Fur',      desc:'Brush 100,000 strokes in total',      check:s=>s.totalStrokes>=100000 },
@@ -721,14 +754,14 @@ const ACHS = [
   { id:'steel500', icon:'⛰️', name:'Immovable',          desc:'Freeze in time 500 times total',      check:s=>s.totalFreezes>=500 },
   { id:'steel1000',icon:'☯️', name:'One With Đậu',       desc:'Freeze in time 1000 times total',     check:s=>s.totalFreezes>=1000 },
   // --- best freeze streak in one run ---
-  { id:'cool3',    icon:'🫶', name:'Quick Reflexes',     desc:'Freeze in time 3 times in one run',   check:s=>s.bestFreezeStreak>=3 },
+  { id:'cool3',    icon:'🙌', name:'Quick Reflexes',     desc:'Freeze in time 3 times in one run',   check:s=>s.bestFreezeStreak>=3 },
   { id:'cool15',   icon:'❄️', name:'Frozen',             desc:'Freeze in time 15 times in one run',  check:s=>s.bestFreezeStreak>=15 },
   { id:'cool30',   icon:'🏔️', name:'Glacier',            desc:'Freeze in time 30 times in one run',  check:s=>s.bestFreezeStreak>=30 },
-  { id:'cool50',   icon:'🥌', name:'Absolute Zero',      desc:'Freeze in time 50 times in one run',  check:s=>s.bestFreezeStreak>=50 },
+  { id:'cool50',   icon:'⛄', name:'Absolute Zero',      desc:'Freeze in time 50 times in one run',  check:s=>s.bestFreezeStreak>=50 },
   // --- total bites ---
-  { id:'ouch25',   icon:'🩼', name:'Scratched',          desc:'Get bitten 25 times total',           check:s=>s.totalDeaths>=25 },
+  { id:'ouch25',   icon:'🤕', name:'Scratched',          desc:'Get bitten 25 times total',           check:s=>s.totalDeaths>=25 },
   { id:'ouch100',  icon:'💀', name:'Nine Lives Gone',    desc:'Get bitten 100 times total',          check:s=>s.totalDeaths>=100 },
-  { id:'ouch250',  icon:'🫣', name:'Glutton for Punishment', desc:'Get bitten 250 times total',      check:s=>s.totalDeaths>=250 },
+  { id:'ouch250',  icon:'🙈', name:'Glutton for Punishment', desc:'Get bitten 250 times total',      check:s=>s.totalDeaths>=250 },
   // --- total runs ---
   { id:'devoted50',icon:'🎀', name:'Committed',          desc:'Play 50 runs',                        check:s=>s.totalRuns>=50 },
   { id:'devoted250',icon:'💌', name:'Forever Yours',     desc:'Play 250 runs',                       check:s=>s.totalRuns>=250 },
@@ -737,7 +770,7 @@ const ACHS = [
   { id:'pts1000',  icon:'💗', name:'Heap of Hearts',     desc:'Earn 1,000 points all-time',          check:s=>s.totalPoints>=1000 },
   { id:'pts5000',  icon:'💝', name:'Mountain of Love',   desc:'Earn 5,000 points all-time',          check:s=>s.totalPoints>=5000 },
   { id:'pts25000', icon:'🌊', name:'Ocean of Affection', desc:'Earn 25,000 points all-time',         check:s=>s.totalPoints>=25000 },
-  { id:'pts100000',icon:'🪐', name:'Universe of Đậu',     desc:'Earn 100,000 points all-time',        check:s=>s.totalPoints>=100000 },
+  { id:'pts100000',icon:'🌌', name:'Universe of Đậu',     desc:'Earn 100,000 points all-time',        check:s=>s.totalPoints>=100000 },
 ];
 
 function snapshot(){
@@ -813,6 +846,17 @@ function closeAch(){ achScreen.classList.add('hidden'); }
 document.getElementById('achBtnTitle').addEventListener('click', e=>{ e.stopPropagation(); openAch(); });
 document.getElementById('achBtnDeath').addEventListener('click', e=>{ e.stopPropagation(); openAch(); });
 document.getElementById('achBack').addEventListener('click', e=>{ e.stopPropagation(); closeAch(); });
+document.getElementById('achReset').addEventListener('click', e=>{
+  e.stopPropagation();
+  if(confirm('Reset ALL achievements and progress? This cannot be undone.')){
+    unlocked = new Set();
+    stats = Object.assign({}, DEFAULT_STATS);
+    best = 0;
+    try{ localStorage.removeItem('dau-ach'); localStorage.removeItem('dau-stats'); localStorage.removeItem('dau-best'); }catch(e){}
+    bestEl.textContent = 'Best: 0';
+    renderAch();
+  }
+});
 achScreen.addEventListener('click', e=>{ if(e.target===achScreen) closeAch(); });
 
 function loadStats(){ try{ return Object.assign({}, DEFAULT_STATS, JSON.parse(localStorage.getItem('dau-stats')||'{}')); }catch(e){ return Object.assign({}, DEFAULT_STATS); } }
@@ -825,12 +869,23 @@ function saveAch(){ try{ localStorage.setItem('dau-ach', JSON.stringify([...unlo
    All kept light/pastel so Đậu's cut-out edges stay clean.
    ------------------------------------------------------------ */
 const BGS = [
-  { id:'cloud',  name:'Cloud',  css:'radial-gradient(130% 100% at 50% 45%, #ffffff 0%, #ffffff 60%, #f0e7dd 100%)' },
-  { id:'blush',  name:'Blush',  css:'radial-gradient(130% 100% at 50% 40%, #fff5fa 0%, #ffe3f1 60%, #ffc9e3 100%)' },
-  { id:'mint',   name:'Mint',   css:'radial-gradient(130% 100% at 50% 40%, #f3fffb 0%, #d8f7ec 60%, #b6ecd9 100%)' },
-  { id:'sky',    name:'Sky',    css:'radial-gradient(130% 100% at 50% 35%, #f4fbff 0%, #dbeefb 60%, #bfe0f5 100%)' },
-  { id:'sunset', name:'Sunset', css:'linear-gradient(180deg, #fff1e6 0%, #ffd9c0 55%, #ffc2a8 100%)' },
-  { id:'lilac',  name:'Lilac',  css:'linear-gradient(180deg, #faf5ff 0%, #ece0fb 55%, #dcc8f5 100%)' },
+  { id:'cloud',  name:'Cloud',
+    css:'radial-gradient(130% 100% at 50% 45%, #ffffff 0%, #ffffff 60%, #f0e7dd 100%)' },
+  { id:'cozy',   name:'Cozy Room',
+    css:'radial-gradient(48% 16% at 50% 90%, rgba(199,104,104,.45) 0%, rgba(199,104,104,0) 72%),'
+       +'linear-gradient(180deg, #f6e9d6 0%, #f6e9d6 78%, #dcb78c 78%, #c99c6d 100%)' },
+  { id:'cushion',name:'Cushion',
+    css:'radial-gradient(40% 15% at 50% 87%, rgba(255,160,193,.92) 0%, rgba(255,160,193,.92) 46%, rgba(255,160,193,0) 74%),'
+       +'linear-gradient(180deg, #fff5f9 0%, #ffe7f0 100%)' },
+  { id:'window', name:'Sunny Window',
+    css:'radial-gradient(26% 24% at 80% 15%, rgba(255,238,160,.95) 0%, rgba(255,238,160,0) 60%),'
+       +'linear-gradient(180deg, #eef8ff 0%, #d9ecfb 60%, #c3e1f6 100%)' },
+  { id:'dusk',   name:'Lavender Dusk',
+    css:'radial-gradient(72% 26% at 50% 92%, rgba(150,120,190,.4) 0%, rgba(150,120,190,0) 72%),'
+       +'linear-gradient(180deg, #f4effc 0%, #e4d7f6 60%, #cebcee 100%)' },
+  { id:'garden', name:'Mint Garden',
+    css:'radial-gradient(60% 22% at 50% 90%, rgba(110,195,150,.45) 0%, rgba(110,195,150,0) 72%),'
+       +'linear-gradient(180deg, #f0fff8 0%, #d9f3e4 60%, #c0e9d1 100%)' },
 ];
 let currentBg = loadBg();
 function applyBg(id){
