@@ -144,9 +144,9 @@
     transition:transform .02s linear;
     filter:drop-shadow(0 5px 5px rgba(0,0,0,.35));
   }
-  #comb.brushing{ animation:combwiggle .16s ease-in-out infinite; }
+  #comb.brushing{ animation:combwiggle .26s ease-in-out infinite; }
   @keyframes combwiggle{
-    0%,100%{ rotate:-7deg } 50%{ rotate:7deg }
+    0%,100%{ rotate:-3deg } 50%{ rotate:3deg }
   }
 
   /* ---------- Floating particle hearts/sparkles ---------- */
@@ -516,9 +516,9 @@ window.addEventListener('contextmenu', e=>e.preventDefault());
    ------------------------------------------------------------ */
 let wiggleCooldown = 0;
 function brushStroke(dist){
-  // score: roughly 1 point per 80px brushed (much slower — points are hard-earned)
+  // score: roughly 1 point per 160px brushed (very slow — points are hard-earned)
   scoreDist += dist;
-  while(scoreDist >= 80){ score++; scoreDist -= 80; }
+  while(scoreDist >= 160){ score++; scoreDist -= 160; }
   scoreEl.textContent = score;
   recordStroke();                      // achievements tracking
 
