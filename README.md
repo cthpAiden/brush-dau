@@ -16,6 +16,8 @@ finger) the comb across Đậu to brush. Freeze the instant he snarls.
 - 😼 Random snarl with a Jjaemu-style **zoom into the mouth**; keep brushing → **YOU DIED**
 - 🙀 **Fake-outs** — Đậu sometimes flinches/twitches *without* snarling, to bait you into freezing
 - ❄️ Freeze-or-die timing that gets harder as your score climbs
+- 🎉 Juicy feedback — the score pops, a confetti burst + chime celebrates every 50
+  points, and the brush sound rises in pitch the longer your brushing streak lasts
 - 🏆 **50 achievements** (score milestones, reflex streaks, grind goals) saved on your
   device, with an unlock toast + trophy panel and a **Reset progress** button
 - 🎨 **6 background themes** — Cloud, Cozy Room, Cushion, Sunny Window, Lavender Dusk,
@@ -26,7 +28,7 @@ finger) the comb across Đậu to brush. Freeze the instant he snarls.
 - 📱 Works with mouse or finger (desktop + mobile)
 
 ## Controls
-- **Hold & drag** — brush Đậu (each stroke scores ~1 point per 180px brushed)
+- **Hold & drag** — brush Đậu (each stroke scores ~1 point per 130px brushed)
 - **Freeze** (stop moving / let go) the instant you see red / **FREEZE!**
 - **🏠** top-right — back to main menu · **🔊** — mute · **🏆** — achievements
 
