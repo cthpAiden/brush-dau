@@ -314,8 +314,8 @@
   <div id="titleScreen" class="screen">
     <img class="hero" src="assets/Dau_alerted.png" alt="Dau" draggable="false"/>
     <h1><span class="paw">🐾</span> Brush&nbsp;Đậu</h1>
-    <p>Dau wants to be brushed. Drag the comb across the fur to earn points —
-       but the moment Dau <b style="color:var(--danger)">snarls and lunges at you</b>, STOP brushing.
+    <p>He wants to be brushed. Drag the comb across the fur to earn points —
+       but the moment he <b style="color:var(--danger)">snarls and lunges at you</b>, STOP brushing.
        Keep going and you'll get bitten.</p>
     <button class="startBtn" id="startBtn">Start brushing</button>
     <button class="achBtn" id="achBtnTitle">🏆 Achievements</button>
@@ -530,9 +530,9 @@ window.addEventListener('contextmenu', e=>e.preventDefault());
    ------------------------------------------------------------ */
 let wiggleCooldown = 0;
 function brushStroke(dist){
-  // score: roughly 1 point per 180px brushed (very slow — points are hard-earned)
+  // score: roughly 1 point per 160px brushed (very slow — points are hard-earned)
   scoreDist += dist;
-  while(scoreDist >= 180){ score++; scoreDist -= 180; }
+  while(scoreDist >= 160){ score++; scoreDist -= 160; }
   scoreEl.textContent = score;
   recordStroke();                      // achievements tracking
 
