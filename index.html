@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<!-- This meta tag makes the game fit phone screens and disables pinch-zoom so brushing feels native -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#fbf6f0" />
+<title>Brush Đậu 🐾</title>
+<style>
+  /* ============================================================
+     BRUSH DAU  —  a Brush Jjaemu clone starring Dau the cat
+     One single file. All styling lives here in <style>,
+     all behaviour lives in the <script> at the bottom.
+     ============================================================ */
+
+  :root{
+    --bg:#ffffff;          /* page background — matches the photos' white background */
+    --bg-edge:#f0e7dd;     /* soft warm tint at the screen edges */
+    --accent:#ff7eb0;      /* cute pink */
+    --accent-dark:#d65a8e;
+    --danger:#e23b3b;      /* the "looking / died" red */
+    --text:#3a3340;        /* dark text for the light theme */
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  html,body{
+    margin:0; padding:0; height:100%; width:100%;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Trebuchet MS','Segoe UI',system-ui,sans-serif;
+    overflow:hidden;                 /* no scrolling, it's a full-screen game */
+    overscroll-behavior:none;
+    user-select:none; -webkit-user-select:none;
+    touch-action:none;               /* stop the browser stealing our finger drags */
+  }
+
+  /* The game fills the whole screen and centres its contents.
+     The cat photos are pure white, so the centre stays white (seamless blend)
+     and only the far edges get a soft warm tint. */
+  #game{
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(130% 100% at 50% 45%, #ffffff 0%, #ffffff 60%, var(--bg-edge) 100%);
+    cursor:none;                     /* hide the real cursor; we draw our own comb */
+    overflow:hidden;
+  }
+
+  /* ---------- The cat ---------- */
+  #catWrap{
+    position:relative;
+    display:flex; align-items:center; justify-content:center;
+    width:100%; height:100%;
+    pointer-events:none;             /* pointer math is done on the whole stage */
+  }
+  /* gentle breathing while calm (on the wrapper, so it never fights the zoom) */
+  #catWrap.breathe{ animation:breathe 3.6s ease-in-out infinite; }
+  @keyframes breathe{
+    0%,100%{ transform:scale(1) translateY(0); }
+    50%    { transform:scale(1.012) translateY(-4px); }
+  }
+
+  #cat{
+    height:min(90vh, 820px); width:auto; max-width:96vw;
+    display:block;
+    -webkit-user-drag:none; user-drag:none;
+    /* the zoom focuses on the centre of Dau's open mouth */
+    transform-origin:46% 34%;
+    transform:scale(1);
+    transition:transform .45s cubic-bezier(.2,.7,.3,1);
+    will-change:transform;
+  }
+  /* head zooms in when Dau snarls (the warning) */
+  #cat.zoomAlert{ transform:scale(1.55); }
+  /* hard zoom deep into the mouth on the bite (the scare) */
+  #cat.zoomBite{ transform:scale(6.2); transition:transform .3s ease-in; }
+  /* quick wiggle when the brush is touching Dau */
+  #cat.wiggle{ animation:wiggle .18s ease-in-out; }
+  @keyframes wiggle{
+    0%{ transform:rotate(0) }
+    25%{ transform:rotate(-1.4deg) translateX(-4px) }
+    75%{ transform:rotate(1.4deg) translateX(4px) }
+    100%{ transform:rotate(0) }
+  }
+  /* hard shake the instant Dau bites */
+  #game.shake{ animation:shake .4s linear; }
+  @keyframes shake{
+    0%,100%{ transform:translate(0,0) }
+    20%{ transform:translate(-12px,8px) }
+    40%{ transform:translate(10px,-10px) }
+    60%{ transform:translate(-8px,-6px) }
+    80%{ transform:translate(8px,8px) }
+  }
+
+  /* Red danger vignette that pulses while Dau is watching you */
+  #danger{
+    position:fixed; inset:0; pointer-events:none; opacity:0;
+    box-shadow:inset 0 0 180px 60px rgba(226,59,59,.0);
+    transition:opacity .15s ease;
+  }
+  #danger.on{
+    opacity:1;
+    box-shadow:inset 0 0 200px 80px rgba(226,59,59,.6);
+    animation:pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse{ 50%{ box-shadow:inset 0 0 240px 100px rgba(226,59,59,.4) } }
+
+  /* "FREEZE!" banner */
+  #freeze{
+    position:fixed; top:10%; left:50%; transform:translateX(-50%) scale(.6);
+    font-size:clamp(34px,9vw,86px); font-weight:900; letter-spacing:4px;
+    color:#fff; text-shadow:0 0 22px var(--danger),0 4px 0 #7a0d0d, 0 0 4px #b71c1c;
+    opacity:0; pointer-events:none; transition:opacity .12s, transform .12s; z-index:6;
+  }
+  #freeze.on{ opacity:1; transform:translateX(-50%) scale(1); }
+
+  /* ---------- Score / HUD ---------- */
+  #hud{ position:fixed; top:0; left:0; right:0; padding:18px 22px;
+        display:flex; justify-content:space-between; align-items:flex-start;
+        pointer-events:none; z-index:5; }
+  #score{ font-size:clamp(40px,11vw,96px); font-weight:900; line-height:1;
+           color:var(--accent-dark); text-shadow:0 2px 0 #fff, 0 0 10px rgba(255,255,255,.8); }
+  #best{ font-size:14px; color:var(--text); opacity:.65; margin-top:6px; }
+  #muteBtn{
+    pointer-events:auto; cursor:pointer;
+    background:rgba(255,255,255,.7); border:1px solid rgba(0,0,0,.1);
+    color:var(--text); font-size:20px; width:46px; height:46px; border-radius:50%;
+    display:grid; place-items:center; box-shadow:0 2px 8px rgba(0,0,0,.08);
+  }
+  #muteBtn:active{ transform:scale(.92); }
+
+  /* ---------- The comb that follows the pointer ---------- */
+  #comb{
+    position:fixed; top:0; left:0; width:64px; height:120px;
+    pointer-events:none; z-index:50; transform-origin:50% 18%;
+    transform:translate(-9999px,-9999px);   /* start off-screen */
+    transition:transform .02s linear;
+    filter:drop-shadow(0 5px 5px rgba(0,0,0,.35));
+  }
+  #comb.brushing{ animation:combwiggle .16s ease-in-out infinite; }
+  @keyframes combwiggle{
+    0%,100%{ rotate:-7deg } 50%{ rotate:7deg }
+  }
+
+  /* ---------- Floating particle hearts/sparkles ---------- */
+  .fx{ position:fixed; pointer-events:none; z-index:40; font-size:26px;
+       animation:floatUp .9s ease-out forwards; will-change:transform,opacity; }
+  @keyframes floatUp{
+    0%{ transform:translate(-50%,-50%) scale(.4); opacity:0; }
+    20%{ opacity:1; }
+    100%{ transform:translate(-50%,-160%) scale(1.2); opacity:0; }
+  }
+
+  /* ---------- Overlays (title + death) ---------- */
+  .screen{
+    position:fixed; inset:0; z-index:60;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:24px;
+    cursor:pointer;
+  }
+  .screen.hidden{ display:none; }
+
+  /* Title screen — light & cute */
+  #titleScreen{ background:rgba(255,252,248,.9); backdrop-filter:blur(4px); }
+  #titleScreen h1{
+    font-size:clamp(40px,12vw,88px); margin:0; letter-spacing:1px;
+    color:var(--accent-dark); text-shadow:0 2px 0 #fff;
+  }
+  #titleScreen .paw{ color:var(--accent); }
+  #titleScreen p{ max-width:520px; font-size:clamp(15px,4vw,19px); line-height:1.6; color:var(--text); }
+  #titleScreen .hero{ width:170px; height:170px; border-radius:50%; object-fit:cover;
+        object-position:50% 16%; border:5px solid #fff;
+        box-shadow:0 12px 34px rgba(0,0,0,.18); margin-bottom:18px; background:#fff; }
+  .startBtn{
+    margin-top:22px; padding:16px 46px; font-size:22px; font-weight:800;
+    color:#fff; background:var(--accent); border:none; border-radius:40px;
+    cursor:pointer; box-shadow:0 8px 0 var(--accent-dark); transition:transform .08s;
+  }
+  .startBtn:active{ transform:translateY(4px); box-shadow:0 4px 0 var(--accent-dark); }
+  .rules{ margin-top:26px; font-size:14px; color:var(--text); opacity:.75; max-width:480px; line-height:1.7 }
+  .rules b{ color:var(--danger) }
+
+  /* Death screen — Dark Souls style (kept dark on purpose for drama) */
+  #deathScreen{ background:rgba(8,8,10,.9); }
+  #deathScreen .bite{ position:fixed; inset:0; width:100%; height:100%;
+        object-fit:cover; object-position:50% 22%; opacity:.16; filter:brightness(.7); z-index:-1; }
+  #deathScreen .died{
+    font-family:'Times New Roman',Georgia,serif;
+    font-size:clamp(48px,15vw,120px); font-weight:700; letter-spacing:6px;
+    color:var(--danger); text-shadow:0 0 30px rgba(226,59,59,.55);
+    margin:0;
+  }
+  #deathScreen .finalScore{ font-size:clamp(22px,6vw,34px); margin:6px 0 2px; color:#f4f1ea; }
+  #deathScreen .newbest{ color:var(--accent); font-weight:800; font-size:18px; height:22px; }
+  #deathScreen .restart{ margin-top:30px; font-size:18px; color:#f4f1ea; opacity:.75; }
+  #deathScreen .restart::after{ content:' ▸'; }
+
+  @media (max-width:520px){
+    #hud{ padding:12px 14px; }
+    #comb{ width:54px; height:100px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="game">
+  <!-- The cat -->
+  <div id="catWrap">
+    <img id="cat" src="assets/Dau_calm.png" alt="Dau the cat" draggable="false" />
+  </div>
+
+  <!-- Effects layers -->
+  <div id="danger"></div>
+  <div id="freeze">FREEZE!</div>
+
+  <!-- Heads-up display -->
+  <div id="hud">
+    <div>
+      <div id="score">0</div>
+      <div id="best">Best: 0</div>
+    </div>
+    <button id="muteBtn" title="Sound on/off">🔊</button>
+  </div>
+
+  <!-- The comb cursor (an inline SVG so there's no extra image file to manage) -->
+  <svg id="comb" viewBox="0 0 64 120" xmlns="http://www.w3.org/2000/svg">
+    <!-- teardrop handle, like the real Brush Jjaemu comb -->
+    <path d="M32 50 C20 60 20 96 32 116 C44 96 44 60 32 50 Z" fill="#161616"/>
+    <ellipse cx="27" cy="82" rx="3" ry="8" fill="rgba(255,255,255,.10)"/>
+    <!-- spine -->
+    <rect x="5" y="44" width="54" height="14" rx="7" fill="#161616"/>
+    <!-- fine teeth -->
+    <g fill="#161616">
+      <rect x="6"  y="6" width="3.2" height="42" rx="1.6"/>
+      <rect x="12" y="6" width="3.2" height="42" rx="1.6"/>
+      <rect x="18" y="6" width="3.2" height="42" rx="1.6"/>
+      <rect x="24" y="6" width="3.2" height="42" rx="1.6"/>
+      <rect x="30" y="6" width="3.2" height="42" rx="1.6"/>
+      <rect x="36" y="6" width="3.2" height="42" rx="1.6"/>
+      <rect x="42" y="6" width="3.2" height="42" rx="1.6"/>
+      <rect x="48" y="6" width="3.2" height="42" rx="1.6"/>
+      <rect x="54" y="6" width="3.2" height="42" rx="1.6"/>
+    </g>
+    <!-- spine shine -->
+    <rect x="8" y="47" width="48" height="2.5" rx="1.25" fill="rgba(255,255,255,.14)"/>
+  </svg>
+
+  <!-- TITLE SCREEN -->
+  <div id="titleScreen" class="screen">
+    <img class="hero" src="assets/Dau_alerted.png" alt="Dau" draggable="false"/>
+    <h1><span class="paw">🐾</span> Brush&nbsp;Đậu</h1>
+    <p>Dau wants to be brushed. Drag the comb across the fur to earn points —
+       but the moment Dau <b style="color:var(--danger)">snarls and lunges at you</b>, STOP brushing.
+       Keep going and you'll get bitten.</p>
+    <button class="startBtn" id="startBtn">Start brushing</button>
+    <div class="rules">
+      🖱️ <b style="color:var(--text)">Hold &amp; drag</b> to brush &nbsp;•&nbsp;
+      🟥 See red / <b>FREEZE!</b> → let go and hold still &nbsp;•&nbsp;
+      📱 Works with your finger too
+    </div>
+  </div>
+
+  <!-- DEATH SCREEN -->
+  <div id="deathScreen" class="screen hidden">
+    <img class="bite" id="biteImg" src="assets/Dau_alerted.png" alt="" draggable="false"/>
+    <div class="finalScore">Score: <span id="finalScore">0</span></div>
+    <h1 class="died">YOU DIED</h1>
+    <div class="newbest" id="newBest"></div>
+    <div class="restart">Click / tap to brush again</div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   GAME LOGIC
+   Read top-to-bottom; each section is labelled.
+   ============================================================ */
+
+// ---- Grab the elements we'll touch often ----
+const game        = document.getElementById('game');
+const cat         = document.getElementById('cat');
+const catWrap     = document.getElementById('catWrap');
+const comb        = document.getElementById('comb');
+const danger      = document.getElementById('danger');
+const freeze      = document.getElementById('freeze');
+const scoreEl     = document.getElementById('score');
+const bestEl      = document.getElementById('best');
+const muteBtn     = document.getElementById('muteBtn');
+const titleScreen = document.getElementById('titleScreen');
+const deathScreen = document.getElementById('deathScreen');
+const finalScoreEl= document.getElementById('finalScore');
+const newBestEl   = document.getElementById('newBest');
+
+// ---- Image sources for the two cat moods ----
+const IMG_CALM  = 'assets/Dau_calm.png';
+const IMG_ALERT = 'assets/Dau_alerted.png';
+
+// ---- Game state ----
+let state = 'title';            // 'title' | 'playing' | 'looking' | 'dead'
+let score = 0;
+let scoreDist = 0;              // accumulated brush distance, converted into points
+let best = loadBest();
+let soundOn = true;
+
+// pointer tracking
+const ptr = { x:-9999, y:-9999, down:false, lastX:0, lastY:0 };
+
+// timers we may need to cancel
+let lookTimer = null;           // schedules the next "Dau snarls at you"
+let endLookTimer = null;        // ends a looking phase
+let graceTimer = null;          // reaction window before biting becomes lethal
+let lethal = false;             // true once the grace window has passed during a look
+
+bestEl.textContent = 'Best: ' + best;
+
+/* ------------------------------------------------------------
+   SOUND  — all synthesised with the Web Audio API,
+   so there are no sound files to download or host.
+   ------------------------------------------------------------ */
+let audioCtx = null;
+function ensureAudio(){
+  if(!audioCtx){
+    try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+    catch(e){ audioCtx = null; }
+  }
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+function blip(type, freqStart, freqEnd, dur, gain){
+  if(!soundOn || !audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freqStart, t);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(1,freqEnd), t+dur);
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  osc.connect(g).connect(audioCtx.destination);
+  osc.start(t); osc.stop(t+dur+0.02);
+}
+let lastBrushSound = 0;
+function soundBrush(){                       // soft swish, throttled
+  if(!audioCtx) return;
+  const now = audioCtx.currentTime;
+  if(now - lastBrushSound < 0.045) return;
+  lastBrushSound = now;
+  // short filtered noise = a brushy "shh"
+  const buf = audioCtx.createBuffer(1, 1024, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i] = (Math.random()*2-1)*0.5;
+  const src = audioCtx.createBufferSource(); src.buffer = buf;
+  const filt = audioCtx.createBiquadFilter(); filt.type='bandpass'; filt.frequency.value=1800; filt.Q.value=0.7;
+  const g = audioCtx.createGain(); g.gain.value = soundOn?0.12:0;
+  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.08);
+  src.connect(filt).connect(g).connect(audioCtx.destination);
+  src.start();
+}
+function soundLook(){                          // a sharp hiss when Dau snarls
+  blip('sawtooth', 900, 500, 0.16, 0.12);
+  if(!audioCtx || !soundOn) return;
+  const buf = audioCtx.createBuffer(1, 6000, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1)*0.4*(1-i/d.length);
+  const src = audioCtx.createBufferSource(); src.buffer = buf;
+  const filt = audioCtx.createBiquadFilter(); filt.type='highpass'; filt.frequency.value=3000;
+  const g = audioCtx.createGain(); g.gain.value = 0.16;
+  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.22);
+  src.connect(filt).connect(g).connect(audioCtx.destination); src.start();
+}
+function soundBite(){                           // angry chomp
+  blip('sawtooth', 220, 40, 0.35, 0.35);
+  if(!audioCtx) return;
+  const buf = audioCtx.createBuffer(1, 4096, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1)*(1-i/d.length);
+  const src = audioCtx.createBufferSource(); src.buffer = buf;
+  const g = audioCtx.createGain(); g.gain.value = soundOn?0.4:0;
+  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.25);
+  src.connect(g).connect(audioCtx.destination); src.start();
+}
+
+/* ------------------------------------------------------------
+   DIFFICULTY  — the higher your score, the sooner Dau snarls
+   and the less reaction time you get.
+   ------------------------------------------------------------ */
+function nextLookDelay(){
+  const d = Math.max(900, 3200 - score*55);        // ms until next snarl
+  return d + Math.random()*1200;
+}
+function graceWindow(){
+  return Math.max(260, 620 - score*12);            // reaction time (ms)
+}
+function lookDuration(){
+  return 750 + Math.random()*1200;                 // how long Dau stays snarling
+}
+
+/* ------------------------------------------------------------
+   POINTER HANDLING  (mouse + touch via Pointer Events)
+   ------------------------------------------------------------ */
+function moveComb(x,y){
+  // place the comb so its teeth sit at the pointer
+  comb.style.transform = `translate(${x-32}px, ${y-14}px)`;
+}
+function overCat(x,y){
+  const r = cat.getBoundingClientRect();
+  return x>=r.left && x<=r.right && y>=r.top && y<=r.bottom;
+}
+
+window.addEventListener('pointermove', (e)=>{
+  ptr.x = e.clientX; ptr.y = e.clientY;
+  moveComb(ptr.x, ptr.y);
+  if(state==='title' || state==='dead') return;
+
+  const dx = ptr.x - ptr.lastX, dy = ptr.y - ptr.lastY;
+  const dist = Math.hypot(dx, dy);
+  ptr.lastX = ptr.x; ptr.lastY = ptr.y;
+
+  if(ptr.down && overCat(ptr.x, ptr.y) && dist > 1.5){
+    // The player is actively brushing
+    if(state==='looking' && lethal){
+      die();                         // moved while Dau was snarling → bitten!
+      return;
+    }
+    if(state==='playing'){
+      brushStroke(dist);
+    }
+  }
+}, {passive:false});
+
+function pointerDown(e){
+  ensureAudio();
+  ptr.down = true; ptr.lastX = e.clientX; ptr.lastY = e.clientY;
+  ptr.x=e.clientX; ptr.y=e.clientY; moveComb(ptr.x,ptr.y);
+}
+function pointerUp(){ ptr.down = false; comb.classList.remove('brushing'); }
+window.addEventListener('pointerdown', pointerDown, {passive:false});
+window.addEventListener('pointerup', pointerUp);
+window.addEventListener('pointercancel', pointerUp);
+// stop the page itself from scrolling / selecting during drags
+window.addEventListener('touchmove', e=>{ if(state==='playing'||state==='looking') e.preventDefault(); }, {passive:false});
+window.addEventListener('contextmenu', e=>e.preventDefault());
+
+/* ------------------------------------------------------------
+   BRUSHING
+   ------------------------------------------------------------ */
+let wiggleCooldown = 0;
+function brushStroke(dist){
+  // score: roughly 1 point per 14px brushed
+  scoreDist += dist;
+  while(scoreDist >= 14){ score++; scoreDist -= 14; }
+  scoreEl.textContent = score;
+
+  // visuals + sound
+  comb.classList.add('brushing');
+  spawnParticle(ptr.x, ptr.y);
+  soundBrush();
+
+  const now = performance.now();
+  if(now - wiggleCooldown > 160){
+    wiggleCooldown = now;
+    cat.classList.remove('wiggle'); void cat.offsetWidth; cat.classList.add('wiggle');
+  }
+}
+
+const EMOJIS = ['💗','✨','💖','⭐','💕','🌟','🤍'];
+function spawnParticle(x,y){
+  const s = document.createElement('span');
+  s.className = 'fx';
+  s.textContent = EMOJIS[(Math.random()*EMOJIS.length)|0];
+  s.style.left = (x + (Math.random()*40-20)) + 'px';
+  s.style.top  = (y + (Math.random()*20-10)) + 'px';
+  s.style.fontSize = (18 + Math.random()*16) + 'px';
+  game.appendChild(s);
+  s.addEventListener('animationend', ()=> s.remove());
+}
+
+/* ------------------------------------------------------------
+   THE "SNARL / LOOK AT YOU" CYCLE  — with the zoom-in animation
+   ------------------------------------------------------------ */
+function scheduleLook(){
+  clearTimeout(lookTimer);
+  lookTimer = setTimeout(startLook, nextLookDelay());
+}
+function startLook(){
+  if(state!=='playing') return;
+  state = 'looking';
+  lethal = false;                       // grace period: not lethal yet
+  cat.classList.remove('wiggle');
+  catWrap.classList.remove('breathe');  // stop breathing so the zoom is clean
+  cat.src = IMG_ALERT;                  // Dau snarls, mouth wide open
+  cat.classList.add('zoomAlert');       // ★ head zooms in toward the mouth
+  danger.classList.add('on');
+  freeze.classList.add('on');
+  soundLook();
+
+  // after the reaction window, brushing becomes lethal
+  clearTimeout(graceTimer);
+  graceTimer = setTimeout(()=>{ if(state==='looking') lethal = true; }, graceWindow());
+
+  // Dau eventually calms down again (if you survived)
+  clearTimeout(endLookTimer);
+  endLookTimer = setTimeout(endLook, lookDuration());
+}
+function endLook(){
+  if(state!=='looking') return;
+  state = 'playing';
+  lethal = false;
+  cat.classList.remove('zoomAlert');    // zoom back out
+  cat.src = IMG_CALM;
+  catWrap.classList.add('breathe');
+  danger.classList.remove('on');
+  freeze.classList.remove('on');
+  scheduleLook();
+}
+
+/* ------------------------------------------------------------
+   DEATH  — zoom HARD into the open mouth, then YOU DIED
+   ------------------------------------------------------------ */
+function die(){
+  if(state==='dead') return;
+  state = 'dead';
+  clearTimeout(lookTimer); clearTimeout(endLookTimer); clearTimeout(graceTimer);
+  soundBite();
+  cat.src = IMG_ALERT;
+  cat.classList.remove('zoomAlert');
+  cat.classList.add('zoomBite');        // ★ slam-zoom into the mouth (the scare)
+  danger.classList.remove('on');
+  freeze.classList.remove('on');
+  game.classList.add('shake');
+  setTimeout(()=> game.classList.remove('shake'), 400);
+
+  // new best?
+  let isBest = false;
+  if(score > best){ best = score; saveBest(best); isBest = true; }
+  bestEl.textContent = 'Best: ' + best;
+
+  // show the death screen after the bite zoom lands
+  setTimeout(()=>{
+    finalScoreEl.textContent = score;
+    newBestEl.textContent = isBest ? '🏆 New best!' : '';
+    deathScreen.classList.remove('hidden');
+  }, 700);
+}
+
+/* ------------------------------------------------------------
+   START / RESTART
+   ------------------------------------------------------------ */
+function startGame(){
+  ensureAudio();
+  score = 0; scoreDist = 0; lethal = false;
+  scoreEl.textContent = '0';
+  state = 'playing';
+  cat.classList.remove('zoomAlert','zoomBite','wiggle');
+  cat.src = IMG_CALM;
+  catWrap.classList.add('breathe');
+  danger.classList.remove('on');
+  freeze.classList.remove('on');
+  titleScreen.classList.add('hidden');
+  deathScreen.classList.add('hidden');
+  scheduleLook();
+}
+
+document.getElementById('startBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); });
+titleScreen.addEventListener('click', startGame);          // tapping anywhere on title also starts
+deathScreen.addEventListener('click', startGame);          // tap death screen to restart
+
+/* ------------------------------------------------------------
+   MUTE BUTTON + high-score storage
+   ------------------------------------------------------------ */
+muteBtn.addEventListener('click', (e)=>{
+  e.stopPropagation();
+  soundOn = !soundOn;
+  muteBtn.textContent = soundOn ? '🔊' : '🔇';
+  ensureAudio();
+});
+function loadBest(){ try{ return parseInt(localStorage.getItem('dau-best')||'0',10)||0; }catch(e){ return 0; } }
+function saveBest(v){ try{ localStorage.setItem('dau-best', String(v)); }catch(e){} }
+</script>
+</body>
+</html>
