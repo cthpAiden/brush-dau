@@ -516,9 +516,9 @@ window.addEventListener('contextmenu', e=>e.preventDefault());
    ------------------------------------------------------------ */
 let wiggleCooldown = 0;
 function brushStroke(dist){
-  // score: roughly 1 point per 12.5px brushed
+  // score: roughly 1 point per 5px brushed
   scoreDist += dist;
-  while(scoreDist >= 12.5){ score++; scoreDist -= 12.5; }
+  while(scoreDist >= 5){ score++; scoreDist -= 5; }
   scoreEl.textContent = score;
   recordStroke();                      // achievements tracking
 
