@@ -462,7 +462,7 @@ function soundBrush(){                       // soft swish, throttled
   const g = audioCtx.createGain(); g.gain.value = soundOn?0.12:0;
   g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.08);
   src.connect(filt).connect(g).connect(audioCtx.destination);
-  src.start();
+  src.start(); src.stop(audioCtx.currentTime + 0.12);
 }
 function soundLook(){                          // a sharp hiss when Dau snarls
   blip('sawtooth', 900, 500, 0.16, 0.12);
@@ -474,7 +474,7 @@ function soundLook(){                          // a sharp hiss when Dau snarls
   const filt = audioCtx.createBiquadFilter(); filt.type='highpass'; filt.frequency.value=3000;
   const g = audioCtx.createGain(); g.gain.value = 0.16;
   g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.22);
-  src.connect(filt).connect(g).connect(audioCtx.destination); src.start();
+  src.connect(filt).connect(g).connect(audioCtx.destination); src.start(); src.stop(audioCtx.currentTime + 0.25);
 }
 function soundBite(){                           // angry chomp
   blip('sawtooth', 220, 40, 0.35, 0.35);
@@ -485,7 +485,7 @@ function soundBite(){                           // angry chomp
   const src = audioCtx.createBufferSource(); src.buffer = buf;
   const g = audioCtx.createGain(); g.gain.value = soundOn?0.4:0;
   g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.25);
-  src.connect(g).connect(audioCtx.destination); src.start();
+  src.connect(g).connect(audioCtx.destination); src.start(); src.stop(audioCtx.currentTime + 0.3);
 }
 
 /* ------------------------------------------------------------
@@ -510,6 +510,13 @@ function moveComb(x,y){
   // place the comb so its teeth sit at the pointer
   comb.style.transform = `translate(${x-32}px, ${y-14}px)`;
 }
+// batch comb movement to once per frame (mobile screens fire pointermove far faster
+// than they can repaint — no point moving the comb 200x/sec)
+let combRaf = 0, combX = 0, combY = 0;
+function scheduleComb(x,y){
+  combX = x; combY = y;
+  if(!combRaf){ combRaf = requestAnimationFrame(()=>{ combRaf = 0; moveComb(combX, combY); }); }
+}
 function overCat(x,y){
   const r = cat.getBoundingClientRect();
   return x>=r.left && x<=r.right && y>=r.top && y<=r.bottom;
@@ -517,7 +524,7 @@ function overCat(x,y){
 
 window.addEventListener('pointermove', (e)=>{
   ptr.x = e.clientX; ptr.y = e.clientY;
-  moveComb(ptr.x, ptr.y);
+  scheduleComb(ptr.x, ptr.y);
   if(state==='title' || state==='dead') return;
 
   const dx = ptr.x - ptr.lastX, dy = ptr.y - ptr.lastY;
@@ -554,6 +561,7 @@ window.addEventListener('contextmenu', e=>e.preventDefault());
    ------------------------------------------------------------ */
 let wiggleCooldown = 0;
 let brushStreak = 0;                    // builds while brushing; raises the brush pitch
+let lastParticleTime = 0;               // throttles particle spawns (perf on fast phones)
 function brushStroke(dist){
   // score: roughly 1 point per 140px brushed
   const before = score;
@@ -566,10 +574,10 @@ function brushStroke(dist){
 
   // visuals + sound
   comb.classList.add('brushing');
-  spawnParticle(ptr.x, ptr.y);
+  const now = performance.now();
+  if(now - lastParticleTime > 30){ spawnParticle(ptr.x, ptr.y); lastParticleTime = now; }
   soundBrush();
 
-  const now = performance.now();
   if(now - wiggleCooldown > 160){
     wiggleCooldown = now;
     cat.classList.remove('wiggle'); void cat.offsetWidth; cat.classList.add('wiggle');
@@ -586,6 +594,7 @@ function spawnParticle(x,y){
   s.style.fontSize = (18 + Math.random()*16) + 'px';
   game.appendChild(s);
   s.addEventListener('animationend', ()=> s.remove());
+  setTimeout(()=>{ if(s.parentNode) s.remove(); }, 1100);   // fail-safe if animationend never fires
 }
 
 /* ------------------------------------------------------------
@@ -614,6 +623,7 @@ function celebrate(m){
     s.style.fontSize = (20 + Math.random()*20)+'px';
     game.appendChild(s);
     s.addEventListener('animationend', ()=> s.remove());
+    setTimeout(()=>{ if(s.parentNode) s.remove(); }, 1300);   // fail-safe cleanup
   }
 }
 function soundMilestone(){
