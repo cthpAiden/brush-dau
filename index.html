@@ -219,6 +219,19 @@
   .rules{ margin-top:26px; font-size:14px; color:var(--text); opacity:.75; max-width:480px; line-height:1.7 }
   .rules b{ color:var(--danger) }
 
+  /* Loading screen — shown until both cat images finish downloading */
+  #loadScreen{ background:rgba(255,252,248,.96); backdrop-filter:blur(4px);
+    cursor:default; z-index:90; transition:opacity .35s ease; }
+  #loadScreen.fadeOut{ opacity:0; pointer-events:none; }
+  #loadScreen .loadTitle{ font-size:clamp(34px,10vw,72px); margin:22px 0 0;
+    letter-spacing:1px; color:var(--accent-dark); text-shadow:0 2px 0 #fff; }
+  #loadScreen .loadSub{ margin-top:12px; font-size:clamp(14px,4vw,18px);
+    color:var(--text); opacity:.75; font-weight:700; }
+  .loadSpinner{ width:64px; height:64px; border-radius:50%;
+    border:7px solid var(--accent-light, #ffd6e7); border-top-color:var(--accent);
+    animation:loadSpin 1s linear infinite; }
+  @keyframes loadSpin{ to{ transform:rotate(360deg); } }
+
   /* Background picker on the title screen */
   .bgPicker{ margin-top:22px; display:flex; flex-direction:column; align-items:center; gap:8px; }
   .bgLabel{ font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--text); opacity:.6; font-weight:800; }
@@ -376,6 +389,15 @@
       <button class="achReset" id="achReset">↺ Reset progress</button>
     </div>
   </div>
+
+  <!-- LOADING SCREEN — sits on top of everything until the cat images are
+       fully downloaded, so the game can't be played on half-loaded assets
+       (which made Đậu show up blank/broken on a fresh device). -->
+  <div id="loadScreen" class="screen">
+    <div class="loadSpinner" aria-hidden="true"></div>
+    <h1 class="loadTitle"><span class="paw">🐾</span> Brush&nbsp;Đậu</h1>
+    <div class="loadSub">Waking Đậu up… <span id="loadPct">0</span>%</div>
+  </div>
 </div>
 
 <script>
@@ -409,6 +431,7 @@ let score = 0;
 let scoreDist = 0;              // accumulated brush distance, converted into points
 let best = loadBest();
 let soundOn = true;
+let assetsReady = false;        // flips true once both cat images are downloaded
 
 // pointer tracking
 const ptr = { x:-9999, y:-9999, down:false, lastX:0, lastY:0 };
@@ -725,6 +748,7 @@ function die(){
    START / RESTART
    ------------------------------------------------------------ */
 function startGame(){
+  if(!assetsReady) return;              // images still downloading — ignore early taps
   ensureAudio();
   score = 0; scoreDist = 0; lethal = false;
   scoreEl.textContent = '0';
@@ -981,6 +1005,43 @@ function saveBg(v){ try{ localStorage.setItem('dau-bg', v); }catch(e){} }
 document.getElementById('bgPicker').addEventListener('click', e=>e.stopPropagation());
 renderSwatches();
 applyBg(currentBg);
+
+/* ------------------------------------------------------------
+   ASSET PRELOADER
+   The two cat PNGs are large, so on a brand-new device they take a
+   moment to arrive. We hold a loading screen over the game and only
+   let the player start once BOTH images are fully decoded — otherwise
+   the snarl/bite swap (cat.src = IMG_ALERT) would show a blank cat and
+   the freeze-or-die timing would feel broken. Cached/returning devices
+   resolve this almost instantly.
+   ------------------------------------------------------------ */
+(function preloadAssets(){
+  const PRELOAD   = [IMG_CALM, IMG_ALERT];
+  const loadScreen= document.getElementById('loadScreen');
+  const pctEl     = document.getElementById('loadPct');
+  let done = 0;
+
+  function revealGame(){
+    assetsReady = true;
+    loadScreen.classList.add('fadeOut');
+    setTimeout(()=> loadScreen.classList.add('hidden'), 350);
+  }
+  function oneLoaded(){
+    done++;
+    if(pctEl) pctEl.textContent = Math.round(done / PRELOAD.length * 100);
+    if(done >= PRELOAD.length) revealGame();
+  }
+
+  PRELOAD.forEach(src=>{
+    const img = new Image();
+    let fired = false;
+    const settle = ()=>{ if(fired) return; fired = true; oneLoaded(); };
+    img.onload  = settle;
+    img.onerror = settle;          // never trap the player if an image 404s
+    img.src = src;
+    if(img.complete) settle();     // already cached → resolves immediately
+  });
+})();
 </script>
 </body>
 </html>
